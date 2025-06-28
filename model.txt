@@ -1,0 +1,40 @@
+import pdfplumber
+from sklearn.feature_extraction.text import TfidfVectorizer
+from llama_index.embeddings.base import BaseEmbedding
+from llama_index.core import Document, VectorStoreIndex
+from llama_index.core import SimpleDirectoryReader
+
+# ----- Step 1: Read PDF -----
+def extract_text_from_pdf(file_path):
+    with pdfplumber.open(file_path) as pdf:
+        return "\n".join([page.extract_text() or "" for page in pdf.pages])
+
+# ----- Step 2: Chunk text (basic splitting) -----
+def chunk_text(text, chunk_size=300):
+    words = text.split()
+    return [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]
+
+# ----- Step 3: Custom TF-IDF Embedding for LlamaIndex -----
+class TfidfEmbedding(BaseEmbedding):
+    def __init__(self, texts_for_fit):
+        self.vectorizer = TfidfVectorizer()
+        self.vectorizer.fit(texts_for_fit)
+
+    def _get_text_embedding(self, text):
+        return self.vectorizer.transform([text]).toarray()[0]
+
+# ----- Step 4: Load and process PDF -----
+file_path = "./pdfs/my_document.pdf"
+full_text = extract_text_from_pdf(file_path)
+chunks = chunk_text(full_text)
+
+documents = [Document(text=chunk) for chunk in chunks]
+embed_model = TfidfEmbedding(chunks)
+
+# ----- Step 5: Create LlamaIndex index -----
+index = VectorStoreIndex.from_documents(documents, embed_model=embed_model)
+
+# ----- Step 6: Query with LlamaIndex -----
+query_engine = index.as_query_engine()
+response = query_engine.query("What is this document about?")
+print("Answer:", response)
