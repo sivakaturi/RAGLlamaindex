@@ -1,0 +1,78 @@
+import fitz
+import math
+from collections import Counter
+
+# 1. Extract Text from PDF
+def extract_text_from_pdf(pdf_path):
+    doc = fitz.open(pdf_path)
+    text = ""
+    for page in doc:
+        text += page.get_text()
+    return text
+
+# 2. Chunk Text
+def chunk_text(text, max_len=500):
+    sentences = text.split('. ')
+    chunks = []
+    chunk = ""
+    for sentence in sentences:
+        if len(chunk) + len(sentence) <= max_len:
+            chunk += sentence + ". "
+        else:
+            chunks.append(chunk.strip())
+            chunk = sentence + ". "
+    if chunk:
+        chunks.append(chunk.strip())
+    return chunks
+
+# 3. Custom TF-IDF Embedding
+def compute_tf_idf(chunks):
+    N = len(chunks)
+    df = Counter()
+    tf_list = []
+
+    for chunk in chunks:
+        words = chunk.lower().split()
+        tf = Counter(words)
+        tf_list.append(tf)
+        for word in set(words):
+            df[word] += 1
+
+    idf = {word: math.log(N / (df[word])) for word in df}
+
+    tfidf_vectors = []
+    for tf in tf_list:
+        vec = {}
+        for word in tf:
+            vec[word] = tf[word] * idf.get(word, 0)
+        tfidf_vectors.append(vec)
+    return tfidf_vectors, idf
+
+# 4. Cosine Similarity
+def cosine_sim(vec1, vec2):
+    common = set(vec1.keys()) & set(vec2.keys())
+    num = sum(vec1[w] * vec2[w] for w in common)
+    denom1 = math.sqrt(sum(v**2 for v in vec1.values()))
+    denom2 = math.sqrt(sum(v**2 for v in vec2.values()))
+    return num / (denom1 * denom2 + 1e-10)
+
+# 5. Query Answering
+def answer_query(query, tfidf_vectors, chunks, idf):
+    query_words = query.lower().split()
+    query_tf = Counter(query_words)
+    query_vec = {word: query_tf[word] * idf.get(word, 0) for word in query_tf}
+
+    sims = [cosine_sim(query_vec, chunk_vec) for chunk_vec in tfidf_vectors]
+    best_index = sims.index(max(sims))
+    return chunks[best_index]
+
+# ---- Main Flow ----
+pdf_path = "sample.pdf"
+text = extract_text_from_pdf(pdf_path)
+chunks = chunk_text(text)
+tfidf_vectors, idf = compute_tf_idf(chunks)
+
+query = "What is this document about?"
+answer = answer_query(query, tfidf_vectors, chunks, idf)
+
+print("Answer:", answer)
