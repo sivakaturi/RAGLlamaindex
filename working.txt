@@ -1,0 +1,54 @@
+pip install pymupdf scikit-learn numpy
+
+import fitz  # PyMuPDF
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
+# 1. Extract Text from PDF
+def extract_text_from_pdf(pdf_path):
+    doc = fitz.open(pdf_path)
+    text = ""
+    for page in doc:
+        text += page.get_text()
+    return text
+
+# 2. Chunk Text
+def chunk_text(text, max_len=500):
+    sentences = text.split('. ')
+    chunks = []
+    chunk = ""
+    for sentence in sentences:
+        if len(chunk) + len(sentence) <= max_len:
+            chunk += sentence + ". "
+        else:
+            chunks.append(chunk.strip())
+            chunk = sentence + ". "
+    if chunk:
+        chunks.append(chunk.strip())
+    return chunks
+
+# 3. Embed Chunks with TF-IDF
+def embed_chunks_tfidf(chunks):
+    vectorizer = TfidfVectorizer()
+    vectors = vectorizer.fit_transform(chunks)
+    return vectorizer, vectors
+
+# 4. Query Answering
+def answer_query(query, vectorizer, chunk_vectors, chunks):
+    query_vec = vectorizer.transform([query])
+    similarities = cosine_similarity(query_vec, chunk_vectors).flatten()
+    best_index = np.argmax(similarities)
+    return chunks[best_index]
+
+# ---- Main Usage ----
+pdf_path = "files/us_constitution.pdf"  # Replace with your actual file
+text = extract_text_from_pdf(pdf_path)
+chunks = chunk_text(text)
+vectorizer, chunk_vectors = embed_chunks_tfidf(chunks)
+
+# Ask a question
+query = "What is this document about?"
+answer = answer_query(query, vectorizer, chunk_vectors, chunks)
+
+print("Answer:", answer)
